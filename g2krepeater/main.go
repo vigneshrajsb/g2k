@@ -62,13 +62,28 @@ func main() {
 }
 
 func sendMessageAsHTTPPost(message *kafka.Message) error {
-	// todo - support sending (repeating) the post request to multiple endpoints
-	url := os.Getenv("REPLAY_ENDPOINT")
-	if url == "" {
-		return fmt.Errorf("REPLAY_ENDPOINT not set")
+	endpoints := strings.Split(os.Getenv("REPLAY_ENDPOINTS"), ",")
+	if len(endpoints) == 0 || (len(endpoints) == 1 && endpoints[0] == "") {
+		return fmt.Errorf("REPLAY_ENDPOINTS not set")
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(message.Value))
+	// Launch each request in a goroutine without waiting
+	for _, url := range endpoints {
+		url = strings.TrimSpace(url)
+		go func(endpoint string) {
+			if err := sendToEndpoint(endpoint, message); err != nil {
+				log.Printf("Failed to send to endpoint %s: %v", endpoint, err)
+			} else {
+				log.Printf("Successfully sent to endpoint %s", endpoint)
+			}
+		}(url)
+	}
+
+	return nil
+}
+
+func sendToEndpoint(endpoint string, message *kafka.Message) error {
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(message.Value))
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}

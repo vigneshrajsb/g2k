@@ -1,0 +1,29 @@
+{{- if .Values.g2krelay.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: g2krelay
+  labels:
+    app: g2krelay
+spec:
+  replicas: {{ .Values.g2krelay.replicas }}
+  selector:
+    matchLabels:
+      app: g2krelay
+  template:
+    metadata:
+      labels:
+        app: g2krelay
+    spec:
+      containers:
+        - name: g2krelay
+          image: {{ .Values.g2krelay.image | quote }}
+          env:
+            {{- range $key, $val := .Values.g2krelay.envVars }}
+            - name: {{ $key | quote }}
+              value: {{ $val | quote }}
+            {{- end }}
+          ports:
+            - containerPort: 5050
+{{- end }}
+

@@ -1,0 +1,19 @@
+{{- if .Values.g2krelay.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: g2krelay
+  labels:
+    app: g2krelay
+spec:
+  type: {{ .Values.g2krelay.serviceType }}
+  ports:
+    - port: {{ .Values.g2krelay.servicePort }}
+      targetPort: 5050
+      {{- if eq .Values.g2krelay.serviceType "NodePort" }}
+      nodePort: {{ .Values.g2krelay.nodePort }}
+      {{- end }}
+  selector:
+    app: g2krelay
+{{- end }}
+

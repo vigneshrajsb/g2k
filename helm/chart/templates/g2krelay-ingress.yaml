@@ -1,0 +1,33 @@
+{{- if and .Values.g2krelay.ingress.enabled .Values.g2krelay.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: g2krelay
+  labels:
+    app: g2krelay
+  annotations:
+    {{- range $key, $val := .Values.g2krelay.ingress.annotations }}
+    {{ $key }}: {{ $val | quote }}
+    {{- end }}
+spec:
+  rules:
+    - host: {{ .Values.g2krelay.ingress.host }}
+      http:
+        paths:
+          - path: {{ .Values.g2krelay.ingress.path | default "/" }}
+            pathType: Prefix
+            backend:
+              service:
+                name: g2krelay
+                port:
+                  number: {{ .Values.g2krelay.servicePort }}
+  {{- if .Values.g2krelay.ingress.tls }}
+  tls:
+    {{- range .Values.g2krelay.ingress.tls }}
+    - hosts:
+        - {{ .host }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+

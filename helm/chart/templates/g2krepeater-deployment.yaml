@@ -1,0 +1,27 @@
+{{- if .Values.g2krepeater.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: g2krepeater
+  labels:
+    app: g2krepeater
+spec:
+  replicas: {{ .Values.g2krepeater.replicas }}
+  selector:
+    matchLabels:
+      app: g2krepeater
+  template:
+    metadata:
+      labels:
+        app: g2krepeater
+    spec:
+      containers:
+        - name: g2krepeater
+          image: {{ .Values.g2krepeater.image | quote }}
+          env:
+            {{- range $key, $val := .Values.g2krepeater.envVars }}
+            - name: {{ $key | quote }}
+              value: {{ $val | quote }}
+            {{- end }}
+{{- end }}
+

@@ -1,0 +1,46 @@
+redpanda:
+  enabled: true
+  replicas: 1
+  image: "vectorized/redpanda:latest"
+  containerPort: 9092
+  overprovisioned: true
+  smp: 1
+  memory: "1G"
+  reserveMemory: "0M"
+  nodeId: "0"
+  kafkaAdvertisedHost: "redpanda"
+  resources:
+    limits:
+      memory: "2Gi"
+
+redpandaConsole:
+  enabled: true
+  image: "redpandadata/console:latest"
+  replicas: 1
+  kafkaBrokers: "redpanda.lifecycle-app.svc.cluster.local:9092"
+
+g2krelay:
+  enabled: true
+  replicas: 1
+  image: "vmelikyan/g2krelay:0.1"
+  serviceType: ClusterIP
+  servicePort: 5050
+  envVars:
+    KAFKA_BOOTSTRAP_SERVERS: "redpanda:9092"
+    WEBHOOK_SECRET: ""
+
+  ingress:
+    enabled: false
+    host: ""
+    path: "/"
+    annotations: {}
+    tls: []
+
+g2krepeater:
+  enabled: true
+  replicas: 1
+  image: "vmelikyan/g2krepeater:0.1"
+  envVars:
+    KAFKA_BOOTSTRAP_SERVERS: "redpanda:9092"
+    KAFKA_GROUP_ID: "g2krepeater-group"
+    REPLAY_ENDPOINTS: ""

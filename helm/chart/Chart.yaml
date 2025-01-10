@@ -1,0 +1,7 @@
+# my-system/Chart.yaml
+apiVersion: v2
+name: g2k
+description: A Helm chart that deploys Redpanda, Redpanda Console, g2krelay, and g2krepeater
+type: application
+version: 0.1.0
+appVersion: "1.0"

@@ -14,4 +14,5 @@ Currently only one endpoint is supported. I do plan to add support for multiple 
 | `KAFKA_SASL_MECHANISMS`   | `PLAIN`                                        | The SASL mechanism to use for authentication (e.g., PLAIN, SCRAM-SHA-256).                          | No          |
 | `KAFKA_SASL_USERNAME`     | ""                                           | The username for SASL authentication with the Kafka cluster.                                       | No          |
 | `KAFKA_SASL_PASSWORD`     | ""                                         | The password for SASL authentication with the Kafka cluster. **_Keep this value secure!_**          | No          |
-| `REPLAY_ENDPOINT`     | "<http://host.docker.internal:5001/api/webhooks/github>"                                         | The endpoint to replay the webhooks to          | Yes          |
+| `REPO_FILTERS`            | ""                                         | List of comma separated repositories to process the events for. If empty or not specified will process all.  (e.g `org/repo`)        |
+| `REPLAY_ENDPOINT`     | "<http://host.docker.internal:5001/api/webhooks/github>"                                         | Comma separated endpoints to replay the webhooks to.          | Yes          |

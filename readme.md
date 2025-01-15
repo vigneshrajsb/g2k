@@ -28,6 +28,6 @@ The tilt setup uses `redpand` for running kafka locally. In addition we bootstra
 
 ## Todo
 
-[ ] Upload images to docker
-[ ] Add support to g2krepeater for sending requests to multiple endpoints
-[ ] More documentation
+- [x] Upload images to docker
+- [x] Add support to g2krepeater for sending requests to multiple endpoints (fanout)
+- [ ] More documentation

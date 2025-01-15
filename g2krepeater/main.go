@@ -32,6 +32,8 @@ func main() {
 		log.Fatalf("Failed to subscribe to topics: %s", err)
 	}
 
+	allowedRepos := buildAllowedReposSet()
+
 	sigchan := make(chan os.Signal, 1)
 	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -45,13 +47,16 @@ func main() {
 			log.Printf("Caught signal %v: terminating\n", sig)
 			run = false
 		default:
-			// Poll for messages
 			msg, err := consumer.ReadMessage(500 * time.Millisecond)
 			if err == nil {
+				if !shouldProcessMessage(msg, allowedRepos) {
+					continue
+				}
+
 				if err := sendMessageAsHTTPPost(msg); err != nil {
 					log.Printf("Failed to send message as HTTP POST: %s", err)
 				}
-				fmt.Printf("Received message from topic %s: %s\n", *msg.TopicPartition.Topic, "Message received")
+
 			} else if err.(kafka.Error).Code() != kafka.ErrTimedOut {
 				fmt.Printf("Consumer error: %v (%v)\n", err, msg)
 			}
@@ -61,13 +66,46 @@ func main() {
 	log.Println("Closing consumer...")
 }
 
+func buildAllowedReposSet() map[string]bool {
+	repoFilters := os.Getenv("REPO_FILTERS")
+	if repoFilters == "" {
+		return nil
+	}
+
+	allowed := make(map[string]bool)
+	for _, r := range strings.Split(repoFilters, ",") {
+		trimmed := strings.TrimSpace(r)
+		if trimmed != "" {
+			allowed[trimmed] = true
+		}
+	}
+	return allowed
+}
+
+func shouldProcessMessage(msg *kafka.Message, allowedRepos map[string]bool) bool {
+	if allowedRepos == nil {
+		return true
+	}
+
+	keyParts := strings.Split(string(msg.Key), ".")
+	if len(keyParts) < 2 {
+		return false
+	}
+	orgRepo := keyParts[0] + "/" + keyParts[1]
+
+	if allowedRepos[orgRepo] {
+		return true
+	}
+	log.Printf("Skipping message from repo %s, not in filter", orgRepo)
+	return false
+}
+
 func sendMessageAsHTTPPost(message *kafka.Message) error {
 	endpoints := strings.Split(os.Getenv("REPLAY_ENDPOINTS"), ",")
 	if len(endpoints) == 0 || (len(endpoints) == 1 && endpoints[0] == "") {
 		return fmt.Errorf("REPLAY_ENDPOINTS not set")
 	}
 
-	// Launch each request in a goroutine without waiting
 	for _, url := range endpoints {
 		url = strings.TrimSpace(url)
 		go func(endpoint string) {
@@ -101,12 +139,10 @@ func sendToEndpoint(endpoint string, message *kafka.Message) error {
 	}
 	defer resp.Body.Close()
 
-	// This check can be removed if we want to fire and forget
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("received non-2xx response: %d", resp.StatusCode)
 	}
 
-	// Log the successful response (optional)
 	log.Printf("Successfully sent HTTP POST request. Response: %d", resp.StatusCode)
 
 	return nil
@@ -116,7 +152,6 @@ func LoadConfig() kafka.ConfigMap {
 	m := make(map[string]kafka.ConfigValue)
 
 	envVars := os.Environ()
-
 	prefix := "KAFKA_"
 
 	for _, envVar := range envVars {
@@ -126,9 +161,7 @@ func LoadConfig() kafka.ConfigMap {
 
 		if strings.HasPrefix(key, prefix) {
 			key := strings.Replace(key, prefix, "", 1)
-
 			kConfig := strings.ReplaceAll(strings.ToLower(key), "_", ".")
-
 			m[kConfig] = value
 			log.Printf("Env %s Value %s", kConfig, value)
 		}

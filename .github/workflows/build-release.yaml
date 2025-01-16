@@ -1,0 +1,64 @@
+name: Build & Push Docker Images on Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-push-g2krelay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+      - name: Set up QEMU (for multi-arch)
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: all
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          buildkitd-flags: --debug
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push g2krelay image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./g2krelay
+          file: ./g2krelay/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/g2krelay:${{ github.ref_name }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/g2krelay:latest
+
+  build-and-push-g2krepeater:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+      - name: Set up QEMU (for multi-arch)
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: all
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          buildkitd-flags: --debug
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push g2krepeater image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./g2krepeater
+          file: ./g2krepeater/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/g2krepeater:${{ github.ref_name }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/g2krepeater:latest

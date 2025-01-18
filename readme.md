@@ -1,6 +1,16 @@
-# Github Webhooks to Kafka
+# Consume webhook events to kafka and forward them to 1 or multiple endpoints
 
-Send github webhook events to kafka and forward them to any endpoint.
+```mermaid
+flowchart LR
+    A[GitHub Webhooks] --> B["g2krelay
+(validates & publishes to Kafka)"]
+    B --> C["Kafka
+(Redpanda)"]
+    C --> D["g2krepeater
+(consumes & forwards)"]
+    D --> E[Endpoint 1]
+    D --> F[Endpoint 2]
+```
 
 ## g2krelay
 

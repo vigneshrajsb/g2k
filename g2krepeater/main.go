@@ -111,8 +111,6 @@ func sendMessageAsHTTPPost(message *kafka.Message) error {
 		go func(endpoint string) {
 			if err := sendToEndpoint(endpoint, message); err != nil {
 				log.Printf("Failed to send to endpoint %s: %v", endpoint, err)
-			} else {
-				log.Printf("Successfully sent to endpoint %s", endpoint)
 			}
 		}(url)
 	}
@@ -143,7 +141,7 @@ func sendToEndpoint(endpoint string, message *kafka.Message) error {
 		return fmt.Errorf("received non-2xx response: %d", resp.StatusCode)
 	}
 
-	log.Printf("Successfully sent HTTP POST request. Response: %d", resp.StatusCode)
+	log.Printf("Sent key=%s to endpoint=%s with HTTP status=%d", message.Key, endpoint, resp.StatusCode)
 
 	return nil
 }

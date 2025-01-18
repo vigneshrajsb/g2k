@@ -22,7 +22,7 @@ redpandaConsole:
 g2krelay:
   enabled: true
   replicas: 1
-  image: "vmelikyan/g2krelay:0.1"
+  image: "vmelikyan/g2krelay:latest"
   serviceType: ClusterIP
   servicePort: 5050
   envVars:
@@ -39,9 +39,8 @@ g2krelay:
 g2krepeater:
   enabled: true
   replicas: 1
-  image: "vmelikyan/g2krepeater:0.2"
+  image: "vmelikyan/g2krepeater:latest"
   envVars:
     KAFKA_BOOTSTRAP_SERVERS: "redpanda:9092"
-    KAFKA_GROUP_ID: "g2krepeater-group"
+    KAFKA_GROUP_ID: "g2krepeater-default"
     REPLAY_ENDPOINTS: ""
-    REPO_FILTERS: "vmelikyan/lc-test-2"

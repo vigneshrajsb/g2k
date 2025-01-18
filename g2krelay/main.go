@@ -17,6 +17,8 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
+var isTopicCreated bool
+
 // WebhookPayload represents the structure of the GitHub webhook payload kinda hacky can be improved
 type WebhookPayload struct {
 	Repository struct {
@@ -57,9 +59,9 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 	eventType := r.Header.Get("X-GitHub-Event")
 	if eventType == "" {
 		http.Error(w, "Event type not found", http.StatusBadRequest)
+		return
 	}
 
-	// Parsing the payload here to be used for setting message key
 	var payload WebhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
@@ -99,8 +101,6 @@ func getKafkaHeaders(r *http.Request) []kafka.Header {
 }
 
 func validateSignature(r *http.Request, body []byte) bool {
-	// Maybe some of go github libs support this out of the box?
-	// Could update this if there is a need of a go github lib for other things.
 	signature := r.Header.Get("X-Hub-Signature-256")
 	if signature == "" {
 		log.Println("No signature provided")
@@ -121,21 +121,16 @@ func validateSignature(r *http.Request, body []byte) bool {
 
 func LoadConfig() kafka.ConfigMap {
 	m := make(map[string]kafka.ConfigValue)
-
 	envVars := os.Environ()
-
 	prefix := "KAFKA_"
 
 	for _, envVar := range envVars {
 		parts := strings.SplitN(envVar, "=", 2)
 		key := parts[0]
 		value := parts[1]
-
 		if strings.HasPrefix(key, prefix) {
 			key := strings.Replace(key, prefix, "", 1)
-
 			kConfig := strings.ReplaceAll(strings.ToLower(key), "_", ".")
-
 			m[kConfig] = value
 			log.Printf("Env %s Value %s", kConfig, value)
 		}
@@ -169,7 +164,6 @@ func produceToKafka(topic string, message []byte, action string, headers []kafka
 		return fmt.Errorf("failed to produce message: %w", err)
 	}
 
-	// Wait for delivery report
 	e := <-deliveryChan
 	m := e.(*kafka.Message)
 	if m.TopicPartition.Error != nil {
@@ -183,6 +177,10 @@ func produceToKafka(topic string, message []byte, action string, headers []kafka
 }
 
 func ensureTopicExists(topic string, config kafka.ConfigMap) error {
+	if isTopicCreated {
+		return nil
+	}
+
 	adminClient, err := kafka.NewAdminClient(&config)
 	if err != nil {
 		return fmt.Errorf("failed to create admin client: %w", err)
@@ -209,5 +207,8 @@ func ensureTopicExists(topic string, config kafka.ConfigMap) error {
 			return fmt.Errorf("failed to create topic %s: %v", result.Topic, result.Error)
 		}
 	}
+
+	isTopicCreated = true
+
 	return nil
 }

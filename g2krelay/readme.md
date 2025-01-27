@@ -18,5 +18,6 @@ ReplicationFactor: 1,
 | `KAFKA_SASL_USERNAME`     | ""                                           | The username for SASL authentication with the Kafka cluster.                                       | Yes          |
 | `KAFKA_SASL_PASSWORD`     | ""                                         | The password for SASL authentication with the Kafka cluster. **_Keep this value secure!_**          | Yes          |
 | `WEBHOOK_SECRET`          | ""                                         | A secret key used to authenticate and verify incoming webhook requests. | Yes          |
+| `TOPIC_PARTITIONS`        | `1`                                         | Number of partitions for the topic. Defaults to 1 | No          |
 
 ---

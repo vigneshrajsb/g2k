@@ -7,7 +7,7 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o g2krelay .
+RUN go build -o g2krelay -ldflags "-s -w" -p 1 .
 
 FROM alpine:latest
 

@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -181,6 +182,17 @@ func ensureTopicExists(topic string, config kafka.ConfigMap) error {
 		return nil
 	}
 
+	partitionsStr := os.Getenv("TOPIC_PARTITIONS")
+	if partitionsStr == "" {
+		partitionsStr = "1"
+	}
+
+	numPartitions, err := strconv.Atoi(partitionsStr)
+	if err != nil {
+		log.Printf("TOPIC_PARTITIONS not set, defaulting to 1")
+		numPartitions = 1
+	}
+
 	adminClient, err := kafka.NewAdminClient(&config)
 	if err != nil {
 		return fmt.Errorf("failed to create admin client: %w", err)
@@ -194,7 +206,7 @@ func ensureTopicExists(topic string, config kafka.ConfigMap) error {
 		ctx,
 		[]kafka.TopicSpecification{{
 			Topic:             topic,
-			NumPartitions:     1,
+			NumPartitions:     numPartitions,
 			ReplicationFactor: 1,
 		}},
 	)

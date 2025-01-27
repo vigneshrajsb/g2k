@@ -7,7 +7,7 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o g2krepeater .
+RUN go build -o g2krepeater -ldflags "-s -w" -p 1 .
 
 FROM alpine:latest
 

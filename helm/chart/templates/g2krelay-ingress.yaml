@@ -10,6 +10,7 @@ metadata:
     {{ $key }}: {{ $val | quote }}
     {{- end }}
 spec:
+  ingressClassName: {{ .Values.g2krelay.ingress.className | default "nginx" }}
   rules:
     - host: {{ .Values.g2krelay.ingress.host }}
       http:

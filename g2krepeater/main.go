@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"go.uber.org/zap"
 )
 
 type Webhook struct {
@@ -19,17 +19,23 @@ type Webhook struct {
 }
 
 func main() {
-	config := LoadConfig()
+	logger, err := zap.NewProduction()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	}
+	defer logger.Sync()
+
+	config := LoadConfig(logger)
 
 	consumer, err := kafka.NewConsumer(&config)
 	if err != nil {
-		log.Fatalf("Failed to create consumer: %s", err)
+		logger.Fatal("Failed to create consumer", zap.Error(err))
 	}
 	defer consumer.Close()
 
 	err = consumer.SubscribeTopics([]string{"github.events"}, nil)
 	if err != nil {
-		log.Fatalf("Failed to subscribe to topics: %s", err)
+		logger.Fatal("Failed to subscribe to topics", zap.Error(err))
 	}
 
 	allowedRepos := buildAllowedReposSet()
@@ -37,33 +43,36 @@ func main() {
 	sigchan := make(chan os.Signal, 1)
 	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Println("Consumer started. Waiting for messages...")
+	logger.Info("Consumer started. Waiting for messages...")
 
 	run := true
 
 	for run {
 		select {
 		case sig := <-sigchan:
-			log.Printf("Caught signal %v: terminating\n", sig)
+			logger.Info("Caught signal, terminating", zap.String("signal", sig.String()))
 			run = false
 		default:
 			msg, err := consumer.ReadMessage(500 * time.Millisecond)
 			if err == nil {
-				if !shouldProcessMessage(msg, allowedRepos) {
+				if !shouldProcessMessage(msg, allowedRepos, logger) {
 					continue
 				}
 
-				if err := sendMessageAsHTTPPost(msg); err != nil {
-					log.Printf("Failed to send message as HTTP POST: %s", err)
+				if err := sendMessageAsHTTPPost(msg, logger); err != nil {
+					logger.Error("Failed to send message as HTTP POST", zap.Error(err))
 				}
 
 			} else if err.(kafka.Error).Code() != kafka.ErrTimedOut {
-				fmt.Printf("Consumer error: %v (%v)\n", err, msg)
+				logger.Error("Consumer error",
+					zap.Error(err),
+					zap.Any("message", msg),
+				)
 			}
 		}
 	}
 
-	log.Println("Closing consumer...")
+	logger.Info("Closing consumer...")
 }
 
 func buildAllowedReposSet() map[string]bool {
@@ -82,7 +91,7 @@ func buildAllowedReposSet() map[string]bool {
 	return allowed
 }
 
-func shouldProcessMessage(msg *kafka.Message, allowedRepos map[string]bool) bool {
+func shouldProcessMessage(msg *kafka.Message, allowedRepos map[string]bool, logger *zap.Logger) bool {
 	if allowedRepos == nil {
 		return true
 	}
@@ -96,11 +105,14 @@ func shouldProcessMessage(msg *kafka.Message, allowedRepos map[string]bool) bool
 	if allowedRepos[orgRepo] {
 		return true
 	}
-	log.Printf("Skipping message from repo %s, not in filter", orgRepo)
+	logger.Info("Skipping message",
+		zap.String("repo", orgRepo),
+		zap.String("reason", "not in filter"),
+	)
 	return false
 }
 
-func sendMessageAsHTTPPost(message *kafka.Message) error {
+func sendMessageAsHTTPPost(message *kafka.Message, logger *zap.Logger) error {
 	endpoints := strings.Split(os.Getenv("REPLAY_ENDPOINTS"), ",")
 	if len(endpoints) == 0 || (len(endpoints) == 1 && endpoints[0] == "") {
 		return fmt.Errorf("REPLAY_ENDPOINTS not set")
@@ -109,8 +121,11 @@ func sendMessageAsHTTPPost(message *kafka.Message) error {
 	for _, url := range endpoints {
 		url = strings.TrimSpace(url)
 		go func(endpoint string) {
-			if err := sendToEndpoint(endpoint, message); err != nil {
-				log.Printf("Failed to send to endpoint %s: %v", endpoint, err)
+			if err := sendToEndpoint(endpoint, message, logger); err != nil {
+				logger.Error("Failed to send to endpoint",
+					zap.String("endpoint", endpoint),
+					zap.Error(err),
+				)
 			}
 		}(url)
 	}
@@ -118,7 +133,7 @@ func sendMessageAsHTTPPost(message *kafka.Message) error {
 	return nil
 }
 
-func sendToEndpoint(endpoint string, message *kafka.Message) error {
+func sendToEndpoint(endpoint string, message *kafka.Message, logger *zap.Logger) error {
 	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(message.Value))
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %w", err)
@@ -141,12 +156,16 @@ func sendToEndpoint(endpoint string, message *kafka.Message) error {
 		return fmt.Errorf("received non-2xx response: %d", resp.StatusCode)
 	}
 
-	log.Printf("Sent key=%s to endpoint=%s with HTTP status=%d", message.Key, endpoint, resp.StatusCode)
+	logger.Info("Message sent successfully",
+		zap.String("key", string(message.Key)),
+		zap.String("endpoint", endpoint),
+		zap.Int("status", resp.StatusCode),
+	)
 
 	return nil
 }
 
-func LoadConfig() kafka.ConfigMap {
+func LoadConfig(logger *zap.Logger) kafka.ConfigMap {
 	m := make(map[string]kafka.ConfigValue)
 
 	envVars := os.Environ()
@@ -161,7 +180,10 @@ func LoadConfig() kafka.ConfigMap {
 			key := strings.Replace(key, prefix, "", 1)
 			kConfig := strings.ReplaceAll(strings.ToLower(key), "_", ".")
 			m[kConfig] = value
-			log.Printf("Env %s Value %s", kConfig, value)
+			logger.Info("Kafka config loaded",
+				zap.String("key", kConfig),
+				zap.String("value", value),
+			)
 		}
 	}
 

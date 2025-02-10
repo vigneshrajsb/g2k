@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"go.uber.org/zap"
 )
 
 var isTopicCreated bool
+var logger *zap.Logger
 
 // WebhookPayload represents the structure of the GitHub webhook payload kinda hacky can be improved
 type WebhookPayload struct {
@@ -28,6 +30,13 @@ type WebhookPayload struct {
 }
 
 func main() {
+	var err error
+	logger, err = zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer logger.Sync()
+
 	http.HandleFunc("/api/webhooks/github", webhookHandler)
 
 	serverPort := os.Getenv("PORT")
@@ -35,10 +44,10 @@ func main() {
 		serverPort = "5050"
 	}
 
-	log.Printf("Starting g2krelay server on %s...", serverPort)
+	logger.Info("Starting g2krelay server", zap.String("port", serverPort))
 
 	if err := http.ListenAndServe(":"+serverPort, nil); err != nil {
-		log.Fatalf("Server failed: %s", err)
+		logger.Fatal("Server failed", zap.Error(err))
 	}
 }
 
@@ -78,7 +87,10 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 
 	headers := getKafkaHeaders(r)
 	if err := produceToKafka(topic, body, messageKey, headers); err != nil {
-		log.Printf("Failed to produce message to Kafka: %s", err)
+		logger.Error("Failed to produce message to Kafka",
+			zap.Error(err),
+			zap.String("topic", topic),
+			zap.String("messageKey", messageKey))
 		http.Error(w, "Failed to process webhook", http.StatusInternalServerError)
 		return
 	}
@@ -104,13 +116,13 @@ func getKafkaHeaders(r *http.Request) []kafka.Header {
 func validateSignature(r *http.Request, body []byte) bool {
 	signature := r.Header.Get("X-Hub-Signature-256")
 	if signature == "" {
-		log.Println("No signature provided")
+		logger.Warn("No signature provided")
 		return false
 	}
 
 	secret := os.Getenv("WEBHOOK_SECRET")
 	if secret == "" {
-		log.Println("WEBHOOK_SECRET not set")
+		logger.Warn("WEBHOOK_SECRET not set")
 		return false
 	}
 
@@ -133,7 +145,9 @@ func LoadConfig() kafka.ConfigMap {
 			key := strings.Replace(key, prefix, "", 1)
 			kConfig := strings.ReplaceAll(strings.ToLower(key), "_", ".")
 			m[kConfig] = value
-			log.Printf("Env %s Value %s", kConfig, value)
+			logger.Debug("Kafka config loaded",
+				zap.String("key", kConfig),
+				zap.String("value", value))
 		}
 	}
 
@@ -171,8 +185,10 @@ func produceToKafka(topic string, message []byte, action string, headers []kafka
 		return fmt.Errorf("delivery failed: %w", m.TopicPartition.Error)
 	}
 
-	log.Printf("Message delivered to topic %s [%d] at offset %v",
-		*m.TopicPartition.Topic, m.TopicPartition.Partition, m.TopicPartition.Offset)
+	logger.Info("Message delivered to Kafka",
+		zap.String("topic", *m.TopicPartition.Topic),
+		zap.Int32("partition", m.TopicPartition.Partition),
+		zap.String("offset", m.TopicPartition.Offset.String()))
 	close(deliveryChan)
 	return nil
 }
@@ -189,7 +205,8 @@ func ensureTopicExists(topic string, config kafka.ConfigMap) error {
 
 	numPartitions, err := strconv.Atoi(partitionsStr)
 	if err != nil {
-		log.Printf("TOPIC_PARTITIONS not set, defaulting to 1")
+		logger.Warn("TOPIC_PARTITIONS not set, defaulting to 1",
+			zap.Error(err))
 		numPartitions = 1
 	}
 
@@ -211,16 +228,24 @@ func ensureTopicExists(topic string, config kafka.ConfigMap) error {
 		}},
 	)
 	if err != nil {
+		logger.Error("Failed to create topic",
+			zap.String("topic", topic),
+			zap.Error(err))
 		return fmt.Errorf("failed to create topic: %w", err)
 	}
 
 	for _, result := range results {
 		if result.Error.Code() != kafka.ErrNoError && result.Error.Code() != kafka.ErrTopicAlreadyExists {
+			logger.Error("Topic creation error",
+				zap.String("topic", result.Topic),
+				zap.Error(result.Error))
 			return fmt.Errorf("failed to create topic %s: %v", result.Topic, result.Error)
 		}
+		logger.Info("Topic status",
+			zap.String("topic", result.Topic),
+			zap.String("status", result.Error.String()))
 	}
 
 	isTopicCreated = true
-
 	return nil
 }
